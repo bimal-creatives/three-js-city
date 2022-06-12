@@ -1,228 +1,284 @@
-import * as PIXI from "https://cdn.skypack.dev/pixi.js";
-import { KawaseBlurFilter } from "https://cdn.skypack.dev/@pixi/filter-kawase-blur";
-import SimplexNoise from "https://cdn.skypack.dev/simplex-noise";
-import hsl from "https://cdn.skypack.dev/hsl-to-hex";
-import debounce from "https://cdn.skypack.dev/debounce";
+// Three JS Template
+//----------------------------------------------------------------- BASIC parameters
+var renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize( window.innerWidth, window.innerHeight );
 
-// return a random number within a range
-function random(min, max) {
-  return Math.random() * (max - min) + min;
-}
+if (window.innerWidth > 800) {
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.needsUpdate = true;
+  //renderer.toneMapping = THREE.ReinhardToneMapping;
+  //console.log(window.innerWidth);
+};
+//---
 
-// map a number from 1 range to another
-function map(n, start1, end1, start2, end2) {
-  return ((n - start1) / (end1 - start1)) * (end2 - start2) + start2;
-}
+document.body.appendChild( renderer.domElement );
 
-// Create a new simplex noise instance
-const simplex = new SimplexNoise();
+window.addEventListener('resize', onWindowResize, false);
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize( window.innerWidth, window.innerHeight );
+};
 
-// ColorPalette class
-class ColorPalette {
-  constructor() {
-    this.setColors();
-    this.setCustomProperties();
-  }
+var camera = new THREE.PerspectiveCamera( 20, window.innerWidth / window.innerHeight, 1, 500 );
 
-  setColors() {
-    // pick a random hue somewhere between 220 and 360
-    this.hue = ~~random(220, 360);
-    this.complimentaryHue1 = this.hue + 30;
-    this.complimentaryHue2 = this.hue + 60;
-    // define a fixed saturation and lightness
-    this.saturation = 95;
-    this.lightness = 50;
+camera.position.set(0, 2, 14);
 
-    // define a base color
-    this.baseColor = hsl(this.hue, this.saturation, this.lightness);
-    // define a complimentary color, 30 degress away from the base
-    this.complimentaryColor1 = hsl(
-      this.complimentaryHue1,
-      this.saturation,
-      this.lightness
-    );
-    // define a second complimentary color, 60 degrees away from the base
-    this.complimentaryColor2 = hsl(
-      this.complimentaryHue2,
-      this.saturation,
-      this.lightness
-    );
+var scene = new THREE.Scene();
+var city = new THREE.Object3D();
+var smoke = new THREE.Object3D();
+var town = new THREE.Object3D();
 
-    // store the color choices in an array so that a random one can be picked later
-    this.colorChoices = [
-      this.baseColor,
-      this.complimentaryColor1,
-      this.complimentaryColor2
-    ];
-  }
+var createCarPos = true;
+var uSpeed = 0.001;
 
-  randomColor() {
-    // pick a random color
-    return this.colorChoices[~~random(0, this.colorChoices.length)].replace(
-      "#",
-      "0x"
-    );
-  }
+//----------------------------------------------------------------- FOG background
 
-  setCustomProperties() {
-    // set CSS custom properties so that the colors defined here can be used throughout the UI
-    document.documentElement.style.setProperty("--hue", this.hue);
-    document.documentElement.style.setProperty(
-      "--hue-complimentary1",
-      this.complimentaryHue1
-    );
-    document.documentElement.style.setProperty(
-      "--hue-complimentary2",
-      this.complimentaryHue2
-    );
-  }
-}
+var setcolor = 0xF02050;
+//var setcolor = 0xF2F111;
+//var setcolor = 0xFF6347;
 
-// Orb class
-class Orb {
-  // Pixi takes hex colors as hexidecimal literals (0x rather than a string with '#')
-  constructor(fill = 0x000000) {
-    // bounds = the area an orb is "allowed" to move within
-    this.bounds = this.setBounds();
-    // initialise the orb's { x, y } values to a random point within it's bounds
-    this.x = random(this.bounds["x"].min, this.bounds["x"].max);
-    this.y = random(this.bounds["y"].min, this.bounds["y"].max);
+scene.background = new THREE.Color(setcolor);
+scene.fog = new THREE.Fog(setcolor, 10, 16);
+//scene.fog = new THREE.FogExp2(setcolor, 0.05);
+//----------------------------------------------------------------- RANDOM Function
+function mathRandom(num = 8) {
+  var numValue = - Math.random() * num + Math.random() * num;
+  return numValue;
+};
+//----------------------------------------------------------------- CHANGE bluilding colors
+var setTintNum = true;
+function setTintColor() {
+  if (setTintNum) {
+    setTintNum = false;
+    var setColor = 0x000000;
+  } else {
+    setTintNum = true;
+    var setColor = 0x000000;
+  };
+  //setColor = 0x222222;
+  return setColor;
+};
 
-    // how large the orb is vs it's original radius (this will modulate over time)
-    this.scale = 1;
+//----------------------------------------------------------------- CREATE City
 
-    // what color is the orb?
-    this.fill = fill;
+function init() {
+  var segments = 2;
+  for (var i = 1; i<100; i++) {
+    var geometry = new THREE.CubeGeometry(1,0,0,segments,segments,segments);
+    var material = new THREE.MeshStandardMaterial({
+      color:setTintColor(),
+      wireframe:false,
+      //opacity:0.9,
+      //transparent:true,
+      //roughness: 0.3,
+      //metalness: 1,
+      shading: THREE.SmoothShading,
+      //shading:THREE.FlatShading,
+      side:THREE.DoubleSide});
+    var wmaterial = new THREE.MeshLambertMaterial({
+      color:0xFFFFFF,
+      wireframe:true,
+      transparent:true,
+      opacity: 0.03,
+      side:THREE.DoubleSide/*,
+      shading:THREE.FlatShading*/});
 
-    // the original radius of the orb, set relative to window height
-    this.radius = random(window.innerHeight / 6, window.innerHeight / 3);
+    var cube = new THREE.Mesh(geometry, material);
+    var wire = new THREE.Mesh(geometry, wmaterial);
+    var floor = new THREE.Mesh(geometry, material);
+    var wfloor = new THREE.Mesh(geometry, wmaterial);
+    
+    cube.add(wfloor);
+    cube.castShadow = true;
+    cube.receiveShadow = true;
+    cube.rotationValue = 0.1+Math.abs(mathRandom(8));
+    
+    //floor.scale.x = floor.scale.z = 1+mathRandom(0.33);
+    floor.scale.y = 0.05;//+mathRandom(0.5);
+    cube.scale.y = 0.1+Math.abs(mathRandom(8));
+    //TweenMax.to(cube.scale, 1, {y:cube.rotationValue, repeat:-1, yoyo:true, delay:i*0.005, ease:Power1.easeInOut});
+    /*cube.setScale = 0.1+Math.abs(mathRandom());
+    
+    TweenMax.to(cube.scale, 4, {y:cube.setScale, ease:Elastic.easeInOut, delay:0.2*i, yoyo:true, repeat:-1});
+    TweenMax.to(cube.position, 4, {y:cube.setScale / 2, ease:Elastic.easeInOut, delay:0.2*i, yoyo:true, repeat:-1});*/
+    
+    var cubeWidth = 0.9;
+    cube.scale.x = cube.scale.z = cubeWidth+mathRandom(1-cubeWidth);
+    //cube.position.y = cube.scale.y / 2;
+    cube.position.x = Math.round(mathRandom());
+    cube.position.z = Math.round(mathRandom());
+    
+    floor.position.set(cube.position.x, 0/*floor.scale.y / 2*/, cube.position.z)
+    
+    town.add(floor);
+    town.add(cube);
+  };
+  //----------------------------------------------------------------- Particular
+  
+  var gmaterial = new THREE.MeshToonMaterial({color:0xFFFF00, side:THREE.DoubleSide});
+  var gparticular = new THREE.CircleGeometry(0.01, 3);
+  var aparticular = 5;
+  
+  for (var h = 1; h<300; h++) {
+    var particular = new THREE.Mesh(gparticular, gmaterial);
+    particular.position.set(mathRandom(aparticular), mathRandom(aparticular),mathRandom(aparticular));
+    particular.rotation.set(mathRandom(),mathRandom(),mathRandom());
+    smoke.add(particular);
+  };
+  
+  var pmaterial = new THREE.MeshPhongMaterial({
+    color:0x000000,
+    side:THREE.DoubleSide,
+    roughness: 10,
+    metalness: 0.6,
+    opacity:0.9,
+    transparent:true});
+  var pgeometry = new THREE.PlaneGeometry(60,60);
+  var pelement = new THREE.Mesh(pgeometry, pmaterial);
+  pelement.rotation.x = -90 * Math.PI / 180;
+  pelement.position.y = -0.001;
+  pelement.receiveShadow = true;
+  //pelement.material.emissive.setHex(0xFFFFFF + Math.random() * 100000);
 
-    // starting points in "time" for the noise/self similar random values
-    this.xOff = random(0, 1000);
-    this.yOff = random(0, 1000);
-    // how quickly the noise/self similar random values step through time
-    this.inc = 0.002;
+  city.add(pelement);
+};
 
-    // PIXI.Graphics is used to draw 2d primitives (in this case a circle) to the canvas
-    this.graphics = new PIXI.Graphics();
-    this.graphics.alpha = 0.825;
+//----------------------------------------------------------------- MOUSE function
+var raycaster = new THREE.Raycaster();
+var mouse = new THREE.Vector2(), INTERSECTED;
+var intersected;
 
-    // 250ms after the last window resize event, recalculate orb positions.
-    window.addEventListener(
-      "resize",
-      debounce(() => {
-        this.bounds = this.setBounds();
-      }, 250)
-    );
-  }
-
-  setBounds() {
-    // how far from the { x, y } origin can each orb move
-    const maxDist =
-      window.innerWidth < 1000 ? window.innerWidth / 3 : window.innerWidth / 5;
-    // the { x, y } origin for each orb (the bottom right of the screen)
-    const originX = window.innerWidth / 1.25;
-    const originY =
-      window.innerWidth < 1000
-        ? window.innerHeight
-        : window.innerHeight / 1.375;
-
-    // allow each orb to move x distance away from it's x / y origin
-    return {
-      x: {
-        min: originX - maxDist,
-        max: originX + maxDist
-      },
-      y: {
-        min: originY - maxDist,
-        max: originY + maxDist
-      }
-    };
-  }
-
-  update() {
-    // self similar "psuedo-random" or noise values at a given point in "time"
-    const xNoise = simplex.noise2D(this.xOff, this.xOff);
-    const yNoise = simplex.noise2D(this.yOff, this.yOff);
-    const scaleNoise = simplex.noise2D(this.xOff, this.yOff);
-
-    // map the xNoise/yNoise values (between -1 and 1) to a point within the orb's bounds
-    this.x = map(xNoise, -1, 1, this.bounds["x"].min, this.bounds["x"].max);
-    this.y = map(yNoise, -1, 1, this.bounds["y"].min, this.bounds["y"].max);
-    // map scaleNoise (between -1 and 1) to a scale value somewhere between half of the orb's original size, and 100% of it's original size
-    this.scale = map(scaleNoise, -1, 1, 0.5, 1);
-
-    // step through "time"
-    this.xOff += this.inc;
-    this.yOff += this.inc;
-  }
-
-  render() {
-    // update the PIXI.Graphics position and scale values
-    this.graphics.x = this.x;
-    this.graphics.y = this.y;
-    this.graphics.scale.set(this.scale);
-
-    // clear anything currently drawn to graphics
-    this.graphics.clear();
-
-    // tell graphics to fill any shapes drawn after this with the orb's fill color
-    this.graphics.beginFill(this.fill);
-    // draw a circle at { 0, 0 } with it's size set by this.radius
-    this.graphics.drawCircle(0, 0, this.radius);
-    // let graphics know we won't be filling in any more shapes
-    this.graphics.endFill();
+function onMouseMove(event) {
+  event.preventDefault();
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+};
+function onDocumentTouchStart( event ) {
+  if ( event.touches.length == 1 ) {
+    event.preventDefault();
+    mouse.x = event.touches[ 0 ].pageX -  window.innerWidth / 2;
+    mouse.y = event.touches[ 0 ].pageY - window.innerHeight / 2;
+  };
+};
+function onDocumentTouchMove( event ) {
+  if ( event.touches.length == 1 ) {
+    event.preventDefault();
+    mouse.x = event.touches[ 0 ].pageX -  window.innerWidth / 2;
+    mouse.y = event.touches[ 0 ].pageY - window.innerHeight / 2;
   }
 }
+window.addEventListener('mousemove', onMouseMove, false);
+window.addEventListener('touchstart', onDocumentTouchStart, false );
+window.addEventListener('touchmove', onDocumentTouchMove, false );
 
-// Create PixiJS app
-const app = new PIXI.Application({
-  // render to <canvas class="orb-canvas"></canvas>
-  view: document.querySelector(".orb-canvas"),
-  // auto adjust size to fit the current window
-  resizeTo: window,
-  // transparent background, we will be creating a gradient background later using CSS
-  transparent: true
-});
+//----------------------------------------------------------------- Lights
+var ambientLight = new THREE.AmbientLight(0xFFFFFF, 4);
+var lightFront = new THREE.SpotLight(0xFFFFFF, 20, 10);
+var lightBack = new THREE.PointLight(0xFFFFFF, 0.5);
 
-// Create colour palette
-const colorPalette = new ColorPalette();
+var spotLightHelper = new THREE.SpotLightHelper( lightFront );
+//scene.add( spotLightHelper );
 
-app.stage.filters = [new KawaseBlurFilter(30, 10, true)];
+lightFront.rotation.x = 45 * Math.PI / 180;
+lightFront.rotation.z = -45 * Math.PI / 180;
+lightFront.position.set(5, 5, 5);
+lightFront.castShadow = true;
+lightFront.shadow.mapSize.width = 6000;
+lightFront.shadow.mapSize.height = lightFront.shadow.mapSize.width;
+lightFront.penumbra = 0.1;
+lightBack.position.set(0,6,0);
 
-// Create orbs
-const orbs = [];
+smoke.position.y = 2;
 
-for (let i = 0; i < 10; i++) {
-  const orb = new Orb(colorPalette.randomColor());
+scene.add(ambientLight);
+city.add(lightFront);
+scene.add(lightBack);
+scene.add(city);
+city.add(smoke);
+city.add(town);
 
-  app.stage.addChild(orb.graphics);
+//----------------------------------------------------------------- GRID Helper
+var gridHelper = new THREE.GridHelper( 60, 120, 0xFF0000, 0x000000);
+city.add( gridHelper );
 
-  orbs.push(orb);
+//----------------------------------------------------------------- CAR world
+var generateCar = function() {
+  
+}
+//----------------------------------------------------------------- LINES world
+
+var createCars = function(cScale = 2, cPos = 20, cColor = 0xFFFF00) {
+  var cMat = new THREE.MeshToonMaterial({color:cColor, side:THREE.DoubleSide});
+  var cGeo = new THREE.CubeGeometry(1, cScale/40, cScale/40);
+  var cElem = new THREE.Mesh(cGeo, cMat);
+  var cAmp = 3;
+  
+  if (createCarPos) {
+    createCarPos = false;
+    cElem.position.x = -cPos;
+    cElem.position.z = (mathRandom(cAmp));
+
+    TweenMax.to(cElem.position, 3, {x:cPos, repeat:-1, yoyo:true, delay:mathRandom(3)});
+  } else {
+    createCarPos = true;
+    cElem.position.x = (mathRandom(cAmp));
+    cElem.position.z = -cPos;
+    cElem.rotation.y = 90 * Math.PI / 180;
+  
+    TweenMax.to(cElem.position, 5, {z:cPos, repeat:-1, yoyo:true, delay:mathRandom(3), ease:Power1.easeInOut});
+  };
+  cElem.receiveShadow = true;
+  cElem.castShadow = true;
+  cElem.position.y = Math.abs(mathRandom(5));
+  city.add(cElem);
+};
+
+var generateLines = function() {
+  for (var i = 0; i<60; i++) {
+    createCars(0.1, 20);
+  };
+};
+
+//----------------------------------------------------------------- CAMERA position
+
+var cameraSet = function() {
+  createCars(0.1, 20, 0xFFFFFF);
+  //TweenMax.to(camera.position, 1, {y:1+Math.random()*4, ease:Expo.easeInOut})
+};
+
+//----------------------------------------------------------------- ANIMATE
+
+var animate = function() {
+  var time = Date.now() * 0.00005;
+  requestAnimationFrame(animate);
+  
+  city.rotation.y -= ((mouse.x * 8) - camera.rotation.y) * uSpeed;
+  city.rotation.x -= (-(mouse.y * 2) - camera.rotation.x) * uSpeed;
+  if (city.rotation.x < -0.05) city.rotation.x = -0.05;
+  else if (city.rotation.x>1) city.rotation.x = 1;
+  var cityRotation = Math.sin(Date.now() / 5000) * 13;
+  //city.rotation.x = cityRotation * Math.PI / 180;
+  
+  //console.log(city.rotation.x);
+  //camera.position.y -= (-(mouse.y * 20) - camera.rotation.y) * uSpeed;;
+  
+  for ( let i = 0, l = town.children.length; i < l; i ++ ) {
+    var object = town.children[ i ];
+    //object.scale.y = Math.sin(time*50) * object.rotationValue;
+    //object.rotation.y = (Math.sin((time/object.rotationValue) * Math.PI / 180) * 180);
+    //object.rotation.z = (Math.cos((time/object.rotationValue) * Math.PI / 180) * 180);
+  }
+  
+  smoke.rotation.y += 0.01;
+  smoke.rotation.x += 0.01;
+  
+  camera.lookAt(city.position);
+  renderer.render( scene, camera );  
 }
 
-// Animate!
-if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-  app.ticker.add(() => {
-    orbs.forEach((orb) => {
-      orb.update();
-      orb.render();
-    });
-  });
-} else {
-  orbs.forEach((orb) => {
-    orb.update();
-    orb.render();
-  });
-}
-
-document
-  .querySelector(".overlay__btn--colors")
-  .addEventListener("click", () => {
-    colorPalette.setColors();
-    colorPalette.setCustomProperties();
-
-    orbs.forEach((orb) => {
-      orb.fill = colorPalette.randomColor();
-    });
-  });
+//----------------------------------------------------------------- START functions
+generateLines();
+init();
+animate();
